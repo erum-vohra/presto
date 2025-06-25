@@ -1142,7 +1142,7 @@ ffdotpows *subharm_fderivs_vol(int numharm, int harmnum,
         int jj;
 #ifdef _OPENMP
 // #pragma omp for collapse(2)  Do we want this somehow?
-#pragma omp for
+#pragma omp for collapse(2)
 #endif
         /* Check, should we add the collapse to parallelize numws and numzs loops? */
         for (ii = 0; ii < ffdot->numws; ii++) {
@@ -1410,13 +1410,11 @@ GSList *search_ffdotpows(ffdotpows * ffdot, int numharm,
     numindep = obs->numindep[twon_to_index(numharm)];
     
 #ifdef _OPENMP
-#pragma omp parallel for shared(ffdot,powcut,obs,numharm,numindep)
+#pragma omp parallel for collapse(3) shared(ffdot,powcut,obs,numharm,numindep)
 #endif
     for (ii = 0; ii < ffdot->numws; ii++) {
-        int jj;
-        for (jj = 0; jj < ffdot->numzs; jj++) {
-            int kk;
-            for (kk = 0; kk < ffdot->numrs; kk++) {
+        for (int jj = 0; jj < ffdot->numzs; jj++) {
+            for (int kk = 0; kk < ffdot->numrs; kk++) {
                 if (ffdot->powers[ii][jj][kk] > powcut) {
                     float pow, sig;
                     double rr, zz, ww;

@@ -36,7 +36,7 @@ FFTLINK := $(shell pkg-config --libs fftw3f)
 # https://www.intel.com/content/www/us/en/developer/tools/oneapi/onemkl-link-line-advisor.html
 # MKLROOT := /usr
 # FFTINC := -I${MKLROOT}/include/mkl -DMKL_ILP64
-# FFTLINK := -L${MKLROOT}/lib/intel64 -Wl,--no-as-needed -lmkl_intel_ilp64 -lmkl_sequential -lmkl_core -lpthread -lm -ldl
+# FFTLINK := -L${MKLROOT}/lib/intel64 -Wl,--no-as-needed -lmkl_intel_ilp64 -lmkl_sequential -lmkl_core -lpthread -lm -l
 # Note:  accelsearch tests seems to show that Intel's MKL FFTW interface is about 10% slower than FFTW
 
 # Include and link information for the GLIB 2.0 library
@@ -58,7 +58,7 @@ FC = gfortran
 USEOPENMP = true
 
 # Set this to true if you want to profile.
-USEPROFILE = false
+USEPROFILE = true
 
 # Very recent Intel CPUs might see a few percent speedup using -mavx
 CFLAGS = -I$(PRESTO)/include $(GLIBINC) $(CFITSIOINC) $(PGPLOTINC) $(FFTINC) \
@@ -71,6 +71,8 @@ CLINKFLAGS = $(CFLAGS) -Wl,-rpath,$(PRESTO)/lib
 # re-compile PRESTO, and re-install the python modules.  This seems to be
 # required when using Anaconda Python.
 CFLAGS += -DUSE_FFTW_MALLOC
+CFLAGS += -I/usr/include/glib-2.0
+CFLAGS += -I/usr/lib/x86_64-linux-gnu/glib-2.0/include
 
 # Add some GCC-specific flags that are useful
 ifeq ($(CC),gcc)
