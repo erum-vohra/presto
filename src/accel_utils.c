@@ -1255,22 +1255,71 @@ void free_ffdotpows(ffdotpows * ffd)
 void add_ffdotpows(ffdotpows * fundamental,
                    ffdotpows * subharmonic, int numharm, int harmnum)
 {
-    int ii, jj, kk, ww, rind, zind, wind, subw;
     const double harm_fract = (double) harmnum / (double) numharm;
-    
-    for (ii = 0; ii < fundamental->numws; ii++) {
-        ww = fundamental->wlo + ii * ACCEL_DW;
-        subw = calc_required_w(harm_fract, ww);
-        wind = index_from_w(subw, subharmonic->wlo);
-        for (jj = 0; jj < fundamental->numzs; jj++) {
-            zind = subharmonic->zinds[jj];
-            for (kk = 0; kk < fundamental->numrs; kk++) {
-                rind = subharmonic->rinds[kk];
+
+#ifdef _OPENMP
+    #pragma omp parallel default(none) shared(fundamental, subharmonic, harm_fract)
+    {
+        #pragma omp single
+        {
+            #pragma omp taskloop
+            for (int ii = 0; ii < fundamental->numws; ii++) {
+                int ww = fundamental->wlo + ii * ACCEL_DW;
+                int subw = calc_required_w(harm_fract, ww);
+                int wind = index_from_w(subw, subharmonic->wlo);
+
+                for (int jj = 0; jj < fundamental->numzs; jj++) {
+                    int zind = subharmonic->zinds[jj];
+
+                    for (int kk = 0; kk < fundamental->numrs; kk++) {
+                        int rind = subharmonic->rinds[kk];
+                        fundamental->powers[ii][jj][kk] += subharmonic->powers[wind][zind][rind];
+                    }
+                }
+            }
+        }
+    }
+#else
+    for (int ii = 0; ii < fundamental->numws; ii++) {
+        int ww = fundamental->wlo + ii * ACCEL_DW;
+        int subw = calc_required_w(harm_fract, ww);
+        int wind = index_from_w(subw, subharmonic->wlo);
+
+        for (int jj = 0; jj < fundamental->numzs; jj++) {
+            int zind = subharmonic->zinds[jj];
+
+            for (int kk = 0; kk < fundamental->numrs; kk++) {
+                int rind = subharmonic->rinds[kk];
                 fundamental->powers[ii][jj][kk] += subharmonic->powers[wind][zind][rind];
             }
         }
     }
+#endif
 }
+
+// void add_ffdotpows(ffdotpows * fundamental,
+//                    ffdotpows * subharmonic, int numharm, int harmnum)
+// {
+//     // int ii, jj, kk, ww, rind, zind, wind, subw;
+//     const double harm_fract = (double) harmnum / (double) numharm;
+//  #ifdef _OPENMP
+//  #pragma omp parallel for default(none) shared(fundamental, subharmonic, harm_fract)
+//  #endif
+//     for (int ii = 0; ii < fundamental->numws; ii++) {
+// 		int ww = fundamental->wlo + ii * ACCEL_DW;
+// 		int subw = calc_required_w(harm_fract, ww);
+// 		int wind = index_from_w(subw, subharmonic->wlo);
+// 
+//         for (int jj = 0; jj < fundamental->numzs; jj++) {
+// 			int zind = subharmonic->zinds[jj];
+//          
+//             for (int kk = 0; kk < fundamental->numrs; kk++) {
+//                 int rind = subharmonic->rinds[kk];
+//                 fundamental->powers[ii][jj][kk] += subharmonic->powers[wind][zind][rind];
+//             }
+//         }
+//     }
+// }
 
 void add_ffdotpows_ptrs(ffdotpows * fundamental,
                         ffdotpows * subharmonic, int numharm, int harmnum)
@@ -1410,7 +1459,7 @@ GSList *search_ffdotpows(ffdotpows * ffdot, int numharm,
     numindep = obs->numindep[twon_to_index(numharm)];
     
 #ifdef _OPENMP
-#pragma omp parallel for collapse(3) shared(ffdot,powcut,obs,numharm,numindep)
+#pragma omp parallel for collapse (3) shared(ffdot,powcut,obs,numharm,numindep)
 #endif
     for (ii = 0; ii < ffdot->numws; ii++) {
         for (int jj = 0; jj < ffdot->numzs; jj++) {
@@ -1442,6 +1491,7 @@ GSList *search_ffdotpows(ffdotpows * ffdot, int numharm,
     }
     return cands;
 }
+
 
 void deredden(fcomplex * fft, int numamps)
 /* Attempt to remove rednoise from a time series by using   */
