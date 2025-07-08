@@ -59,6 +59,10 @@ CFLAGS = -I$(PRESTO)/include $(GLIBINC) $(CFITSIOINC) $(PGPLOTINC) $(FFTINC) \
 	-g -Wall -W -fPIC -O3 -ffast-math
 CLINKFLAGS = $(CFLAGS)
 
+CFLAGS += -DUSE_FFTW_MALLOC
+CFLAGS += -I/usr/include/glib-2.0
+CFLAGS += -I/usr/lib/x86_64-linux-gnu/glib-2.0/include
+
 # Add some GCC-specific flags that are useful
 ifeq ($(CC),gcc)
 	CFLAGS += -Wno-unused-result -Wno-unused-but-set-variable \
