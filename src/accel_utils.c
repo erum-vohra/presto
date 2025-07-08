@@ -1119,15 +1119,15 @@ void free_ffdotpows(ffdotpows * ffd)
 void add_ffdotpows(ffdotpows * fundamental,
                    ffdotpows * subharmonic, int numharm, int harmnum)
 {
-    int ii, jj, zz, rind, zind, subz;
+    // int ii, jj, zz, rind, zind, subz;
     const double harm_fract = (double) harmnum / (double) numharm;
 
-    for (ii = 0; ii < fundamental->numzs; ii++) {
-        zz = fundamental->zlo + ii * ACCEL_DZ;
-        subz = calc_required_z(harm_fract, zz);
-        zind = index_from_z(subz, subharmonic->zlo);
-        for (jj = 0; jj < fundamental->numrs; jj++) {
-            rind = subharmonic->rinds[jj];
+    for (int ii = 0; ii < fundamental->numzs; ii++) {
+        int zz = fundamental->zlo + ii * ACCEL_DZ;
+        int subz = calc_required_z(harm_fract, zz);
+        int zind = index_from_z(subz, subharmonic->zlo);
+        for (int jj = 0; jj < fundamental->numrs; jj++) {
+            int rind = subharmonic->rinds[jj];
             fundamental->powers[ii][jj] += subharmonic->powers[zind][rind];
         }
     }

@@ -51,7 +51,7 @@ FC = gfortran
 USEOPENMP = true
 
 # Set this to true if you want to profile.
-USEPROFILE = false
+USEPROFILE = true
 
 # Very recent Intel CPUs might see a few percent speedup using -mavx
 CFLAGS = -I$(PRESTO)/include $(GLIBINC) $(CFITSIOINC) $(PGPLOTINC) $(FFTINC) \
