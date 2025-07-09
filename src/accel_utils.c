@@ -1451,41 +1451,40 @@ void inmem_add_ffdotpows_trans(ffdotpows * fundamental, accelobs * obs,
 GSList *search_ffdotpows(ffdotpows * ffdot, int numharm,
                          accelobs * obs, GSList * cands)
 {
-    int ii;
-    float powcut;
-    long long numindep;
     
-    powcut = obs->powcut[twon_to_index(numharm)];
-    numindep = obs->numindep[twon_to_index(numharm)];
+    float powcut = obs->powcut[twon_to_index(numharm)];
+    long long numindep = obs->numindep[twon_to_index(numharm)];
     
 #ifdef _OPENMP
-#pragma omp parallel for collapse (3) shared(ffdot,powcut,obs,numharm,numindep)
+#pragma omp parallel for collapse(3) shared(ffdot,powcut,obs,numharm,numindep)
 #endif
-    for (ii = 0; ii < ffdot->numws; ii++) {
+    for (int ii = 0; ii < ffdot->numws; ii++) {
         for (int jj = 0; jj < ffdot->numzs; jj++) {
             for (int kk = 0; kk < ffdot->numrs; kk++) {
-                if (ffdot->powers[ii][jj][kk] > powcut) {
-                    float pow, sig;
-                    double rr, zz, ww;
-                    int added = 0;
-                    
-                    pow = ffdot->powers[ii][jj][kk];
-                    sig = candidate_sigma(pow, numharm, numindep);
-                    rr = (ffdot->rlo + kk * (double) ACCEL_DR) / (double) numharm;
-                    zz = (ffdot->zlo + jj * (double) ACCEL_DZ) / (double) numharm;
-                    ww = (ffdot->wlo + ii * (double) ACCEL_DW) / (double) numharm;
-#ifdef _OPENMP
-#pragma omp critical
-#endif
-                    {
-                        cands = insert_new_accelcand(cands, pow, sig, numharm,
-                                                     rr, zz, ww, &added);
-                    }
-                    if (added && !obs->dat_input)
-                        fprintf(obs->workfile,
-                                "%-7.2f  %-7.4f  %-2d  %-14.4f  %-14.9f  %-10.4f %-10.4f\n",
-                                pow, sig, numharm, rr, rr / obs->T, zz, ww);
-                }
+				float pow = ffdot->powers[ii][jj][kk];
+
+				if (pow <= powcut) {
+					continue;
+				}
+
+                float sig = candidate_sigma(pow, numharm, numindep);
+                double rr = (ffdot->rlo + kk * (double) ACCEL_DR) / (double) numharm;
+                double zz = (ffdot->zlo + jj * (double) ACCEL_DZ) / (double) numharm;
+                double ww = (ffdot->wlo + ii * (double) ACCEL_DW) / (double) numharm;
+
+                int added = 0;
+// #ifdef _OPENMP
+// #pragma omp critical
+// #endif
+//                     {
+//                         cands = insert_new_accelcand(cands, pow, sig, numharm,
+//                                                      rr, zz, ww, &added);
+//                     }
+//                     if (added && !obs->dat_input) {
+//                         fprintf(obs->workfile,
+//                                 "%-7.2f  %-7.4f  %-2d  %-14.4f  %-14.9f  %-10.4f %-10.4f\n",
+//                                 pow, sig, numharm, rr, rr / obs->T, zz, ww);
+//                }
             }
         }
     }
