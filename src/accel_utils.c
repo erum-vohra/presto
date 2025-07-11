@@ -1259,28 +1259,25 @@ void inmem_add_ffdotpows_trans(ffdotpows * fundamental, accelobs * obs,
 GSList *search_ffdotpows(ffdotpows * ffdot, int numharm,
                          accelobs * obs, GSList * cands)
 {
-    int ii;
-    float powcut;
-    long long numindep;
 
-    powcut = obs->powcut[twon_to_index(numharm)];
-    numindep = obs->numindep[twon_to_index(numharm)];
+    float powcut = obs->powcut[twon_to_index(numharm)];
+    long long numindep = obs->numindep[twon_to_index(numharm)];
 
 #ifdef _OPENMP
 #pragma omp parallel for shared(ffdot,powcut,obs,numharm,numindep)
 #endif
-    for (ii = 0; ii < ffdot->numzs; ii++) {
-        int jj;
-        for (jj = 0; jj < ffdot->numrs; jj++) {
-            if (ffdot->powers[ii][jj] > powcut) {
-                float pow, sig;
-                double rr, zz;
-                int added = 0;
+    for (int ii = 0; ii < ffdot->numzs; ii++) {
+    	for (int jj = 0; jj < ffdot->numrs; jj++) {
+    		float pow = ffdot->powers[ii][jj];
+    		
+            if (pow <= powcut) {
+                continue;
+            }
+            int added = 0;
 
-                pow = ffdot->powers[ii][jj];
-                sig = candidate_sigma(pow, numharm, numindep);
-                rr = (ffdot->rlo + jj * (double) ACCEL_DR) / (double) numharm;
-                zz = (ffdot->zlo + ii * (double) ACCEL_DZ) / (double) numharm;
+            float sig = candidate_sigma(pow, numharm, numindep);
+            double rr = (ffdot->rlo + jj * (double) ACCEL_DR) / (double) numharm;
+            double zz = (ffdot->zlo + ii * (double) ACCEL_DZ) / (double) numharm;
 #ifdef _OPENMP
 #pragma omp critical
 #endif
@@ -1294,7 +1291,6 @@ GSList *search_ffdotpows(ffdotpows * ffdot, int numharm,
                             pow, sig, numharm, rr, rr / obs->T, zz);
             }
         }
-    }
     return cands;
 }
 
