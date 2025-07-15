@@ -1257,69 +1257,22 @@ void add_ffdotpows(ffdotpows * fundamental,
 {
     const double harm_fract = (double) harmnum / (double) numharm;
 
-#ifdef _OPENMP
-    #pragma omp parallel default(none) shared(fundamental, subharmonic, harm_fract)
-    {
-        #pragma omp single
-        {
-            #pragma omp taskloop
-            for (int ii = 0; ii < fundamental->numws; ii++) {
-                int ww = fundamental->wlo + ii * ACCEL_DW;
-                int subw = calc_required_w(harm_fract, ww);
-                int wind = index_from_w(subw, subharmonic->wlo);
-
-                for (int jj = 0; jj < fundamental->numzs; jj++) {
-                    int zind = subharmonic->zinds[jj];
-
-                    for (int kk = 0; kk < fundamental->numrs; kk++) {
-                        int rind = subharmonic->rinds[kk];
-                        fundamental->powers[ii][jj][kk] += subharmonic->powers[wind][zind][rind];
-                    }
-                }
-            }
-        }
-    }
-#else
     for (int ii = 0; ii < fundamental->numws; ii++) {
-        int ww = fundamental->wlo + ii * ACCEL_DW;
+    	int ww = fundamental->wlo + ii * ACCEL_DW;
         int subw = calc_required_w(harm_fract, ww);
         int wind = index_from_w(subw, subharmonic->wlo);
 
         for (int jj = 0; jj < fundamental->numzs; jj++) {
-            int zind = subharmonic->zinds[jj];
+        	int zind = subharmonic->zinds[jj];
 
             for (int kk = 0; kk < fundamental->numrs; kk++) {
-                int rind = subharmonic->rinds[kk];
+            	int rind = subharmonic->rinds[kk];
                 fundamental->powers[ii][jj][kk] += subharmonic->powers[wind][zind][rind];
+      
             }
         }
     }
-#endif
 }
-
-// void add_ffdotpows(ffdotpows * fundamental,
-//                    ffdotpows * subharmonic, int numharm, int harmnum)
-// {
-//     // int ii, jj, kk, ww, rind, zind, wind, subw;
-//     const double harm_fract = (double) harmnum / (double) numharm;
-//  #ifdef _OPENMP
-//  #pragma omp parallel for default(none) shared(fundamental, subharmonic, harm_fract)
-//  #endif
-//     for (int ii = 0; ii < fundamental->numws; ii++) {
-// 		int ww = fundamental->wlo + ii * ACCEL_DW;
-// 		int subw = calc_required_w(harm_fract, ww);
-// 		int wind = index_from_w(subw, subharmonic->wlo);
-// 
-//         for (int jj = 0; jj < fundamental->numzs; jj++) {
-// 			int zind = subharmonic->zinds[jj];
-//          
-//             for (int kk = 0; kk < fundamental->numrs; kk++) {
-//                 int rind = subharmonic->rinds[kk];
-//                 fundamental->powers[ii][jj][kk] += subharmonic->powers[wind][zind][rind];
-//             }
-//         }
-//     }
-// }
 
 void add_ffdotpows_ptrs(ffdotpows * fundamental,
                         ffdotpows * subharmonic, int numharm, int harmnum)
@@ -1381,7 +1334,7 @@ void inmem_add_ffdotpows(ffdotpows * fundamental, accelobs * obs,
 #ifdef _OPENMP
 #pragma omp for
 #endif
-        for (ii = 0; ii < numzs; ii++) {
+        for (int ii = 0; ii < numzs; ii++) {
             zz = zlo + ii * ACCEL_DZ;
             subz = calc_required_z(harm_fract, zz);
             zind = index_from_z(subz, zlo);
@@ -1392,8 +1345,9 @@ void inmem_add_ffdotpows(ffdotpows * fundamental, accelobs * obs,
     !(defined(__clang__) || defined(__INTEL_COMPILER))
 #pragma GCC ivdep
 #endif
-            for (jj = 0; jj < numrs; jj++)
+            for (jj = 0; jj < numrs; jj++) {
                 outpows[jj] += inpows[rinds[jj]];
+			}
         }
     }
     vect_free(rinds);
@@ -1473,18 +1427,18 @@ GSList *search_ffdotpows(ffdotpows * ffdot, int numharm,
                 double ww = (ffdot->wlo + ii * (double) ACCEL_DW) / (double) numharm;
 
                 int added = 0;
-// #ifdef _OPENMP
-// #pragma omp critical
-// #endif
-//                     {
-//                         cands = insert_new_accelcand(cands, pow, sig, numharm,
-//                                                      rr, zz, ww, &added);
-//                     }
-//                     if (added && !obs->dat_input) {
-//                         fprintf(obs->workfile,
-//                                 "%-7.2f  %-7.4f  %-2d  %-14.4f  %-14.9f  %-10.4f %-10.4f\n",
-//                                 pow, sig, numharm, rr, rr / obs->T, zz, ww);
-//                }
+#ifdef _OPENMP
+#pragma omp critical
+#endif
+                    {
+                        cands = insert_new_accelcand(cands, pow, sig, numharm,
+                                                     rr, zz, ww, &added);
+                    }
+                    if (added && !obs->dat_input) {
+                        fprintf(obs->workfile,
+                                "%-7.2f  %-7.4f  %-2d  %-14.4f  %-14.9f  %-10.4f %-10.4f\n",
+                                pow, sig, numharm, rr, rr / obs->T, zz, ww);
+               }
             }
         }
     }
