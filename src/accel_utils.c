@@ -1012,7 +1012,7 @@ ffdotpows *subharm_fderivs_vol(int numharm, int harmnum,
                                double fullrlo, double fullrhi,
                                subharminfo * shi, accelobs * obs)
 {
-    // float powargr, powargi;
+    float powargr, powargi;
     fcomplex *data, *pdata;
     fftwf_plan invplan;
     ffdotpows *ffdot = (ffdotpows *) malloc(sizeof(ffdotpows));
@@ -1074,11 +1074,10 @@ ffdotpows *subharm_fderivs_vol(int numharm, int harmnum,
     } else if (obs->norm_type == 0) {
         // default block median normalization
         float *powers;
-        double norm;
         powers = gen_fvect(numdata);
         for (int ii = 0; ii < numdata; ii++)
             powers[ii] = POWER(data[ii].r, data[ii].i);
-        norm = 1.0 / sqrt(median(powers, numdata) / log(2.0));
+        double norm = 1.0 / sqrt(median(powers, numdata) / log(2.0));
         vect_free(powers);
         for (int ii = 0; ii < numdata; ii++) {
             data[ii].r *= norm;
@@ -1134,7 +1133,6 @@ ffdotpows *subharm_fderivs_vol(int numharm, int harmnum,
         // tmpdat gets overwritten during the correlation
         fcomplex *tmpdat = gen_cvect(fftlen);
         fcomplex *tmpout = gen_cvect(fftlen);
-        // int jj;
 #ifdef _OPENMP
 // #pragma omp for collapse(2)  Do we want this somehow?
 #pragma omp for collapse(2)
@@ -1170,6 +1168,7 @@ ffdotpows *subharm_fderivs_vol(int numharm, int harmnum,
 #endif
                 for (int kk = 0; kk < ffdot->numrs; kk++) {
                     const int ind = 2 * (kk + offset);
+                    // outpows[kk] = fmaf(fmaf(fdata[ind], fdata[ind], fmaf(fdata[ind + 1], fdata[ind + 1], 0.0)), norm, 0.0);
                     outpows[kk] = (fdata[ind] * fdata[ind] +
                                    fdata[ind + 1] * fdata[ind + 1]) * norm;
                 }
