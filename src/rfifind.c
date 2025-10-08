@@ -64,7 +64,7 @@ int main(int argc, char *argv[])
     int numchan = 0, numint = 0, newper = 0, oldper = 0;
     int blocksperint, ptsperint = 0, ptsperblock = 0, padding = 0;
     int numcands, candnum, numrfi = 0, numrfivect = NUM_RFI_VECT;
-    int ii, jj, kk, slen, insubs = 0;
+    int ii, kk, slen, insubs = 0;
     int harmsum = RFI_NUMHARMSUM, lobin = RFI_LOBIN, numbetween = RFI_NUMBETWEEN;
     double davg, dvar, freq;
     struct spectra_info s;
@@ -303,7 +303,7 @@ int main(int argc, char *argv[])
         chandata = gen_fvect(ptsperint);
         bytemask = gen_bmatrix(numint, numchan);
         for (ii = 0; ii < numint; ii++)
-            for (jj = 0; jj < numchan; jj++)
+            for (int jj = 0; jj < numchan; jj++)
                 bytemask[ii][jj] = GOODDATA;
         rfivect = rfi_vector(rfivect, numchan, numint, 0, numrfivect);
         if (numbetween == 2)
@@ -343,21 +343,62 @@ int main(int argc, char *argv[])
             }
 
             if (padding)
-                for (jj = 0; jj < numchan; jj++)
+                for (int jj = 0; jj < numchan; jj++)
                     bytemask[ii][jj] |= PADDING;
 
-            for (jj = 0; jj < numchan; jj++) {  /* Loop over the channels */
+            fftwf_plan realplan;
+            fcomplex *fftdata = gen_cvect( (ptsperint / 2) + 1 );
+            
+            realplan = fftwf_plan_dft_r2c_1d(ptsperint, chandata, (fftwf_complex *) fftdata, FFTW_PATIENT);
 
+            vect_free(chandata);
+            vect_free(fftdata);
+
+#ifdef _OPENMP            
+#pragma omp parallel default(none) shared(ii, numchan, numint, blocksperint, ptsperint, rawdata, srawdata, insubs, padding, s, cmd, realplan)
+#endif
+			{
+			
+			float *chandata = NULL, powavg, powstd, powmax;
+			chandata = gen_fvect(ptsperint);
+
+			fcomplex *fftdata = gen_cvect( (ptsperint/2) + 1);		
+
+#ifdef _OPENMP
+#pragma omp for
+#endif
+			for (int jj = 0; jj < numchan; jj++) {  /* Loop over the channels */
+                    
+            	int numcands;
+                int harmsum = RFI_NUMHARMSUM, lobin = RFI_LOBIN, numbetween = RFI_NUMBETWEEN;
+    
+                double davg, dvar;
+                    				
+                float norm = 0.0;
+				float **dataavg = NULL, **datastd = NULL, **datapow = NULL;
+		
+				dataavg = gen_fmatrix(numint, numchan);
+        		datastd = gen_fmatrix(numint, numchan);
+       			datapow = gen_fmatrix(numint, numchan);    
+
+				presto_interptype interptype;
+       			fftcand *cands = NULL;
+
+                if (numbetween == 2)
+                	interptype = INTERBIN;
+                else
+                	interptype = INTERPOLATE;
+                    
                 if (RAWDATA)
-                    get_channel(chandata, jj, blocksperint, rawdata, &s);
+                	get_channel(chandata, jj, blocksperint, rawdata, &s);
                 else if (insubs)
                     get_subband(jj, chandata, srawdata, blocksperint);
-
+                    
                 /* Calculate the averages and standard deviations */
                 /* for each point in time.                        */
-
+                    
                 if (padding) {
-                    dataavg[ii][jj] = 0.0;
+                	dataavg[ii][jj] = 0.0;
                     datastd[ii][jj] = 0.0;
                     datapow[ii][jj] = 1.0;
                 } else {
@@ -366,29 +407,29 @@ int main(int argc, char *argv[])
                     datastd[ii][jj] = sqrt(dvar);
                     numcands = 0;
                     powmax = 0.0;
-                    // Don't search the power spectrum if there is little to no variance
+                 	// Don't search the power spectrum if there is little to no variance
                     if (datastd[ii][jj] > 1e-4) {
-                        realfft(chandata, ptsperint, -1);
+                    	fftwf_execute(realplan);
                         norm = datastd[ii][jj] * datastd[ii][jj] * ptsperint;
-                        cands = search_fft((fcomplex *) chandata, ptsperint / 2,
-                                           lobin, ptsperint / 2, harmsum,
+                        cands = search_fft((fcomplex *) fftdata, (ptsperint / 2) + 1,
+                                           lobin, (ptsperint / 2) + 1, harmsum,
                                            numbetween, interptype, norm, cmd->freqsigma,
                                            &numcands, &powavg, &powstd, &powmax);
-                        // Make sure that nothing bad happened in the FFT search
-                        if (!isnormal(powmax)) {
-                            printf("WARNING:  FFT search returned bad powmax (%f) in"
-                                   "int=%d and chan=%d.  Fixing.\n",
-                                   powmax, ii, jj);
-                            powmax = 0.0;
-                            numcands = 0;
-                            free(cands);
-                        }
-                    }
+                       // Make sure that nothing bad happened in the FFT search
+                       if (!isnormal(powmax)) {
+                       	   printf("WARNING:  FFT search returned bad powmax (%f) in"
+                                  "int=%d and chan=%d.  Fixing.\n",
+                                  powmax, ii, jj);
+                           powmax = 0.0;
+                           numcands = 0;
+                           free(cands);
+                       }
+                   	}
                     datapow[ii][jj] = powmax;
 
                     /* Record the birdies */
 
-                    if (numcands) {
+                    /* if (numcands) {
                         for (kk = 0; kk < numcands; kk++) {
                             freq = cands[kk].r / inttime;
                             candnum =
@@ -408,9 +449,14 @@ int main(int argc, char *argv[])
                             }
                         }
                         free(cands);
-                    }
+                    } */
                 }
+
             }
+            vect_free(chandata);
+            vect_free(fftdata);
+           	}
+           	
         }
         printf("\rAmount Complete = 100%%\n");
 
@@ -442,7 +488,7 @@ int main(int argc, char *argv[])
         chkfread(bytemask[0], numint * numchan, 1, bytemaskfile);
         fclose(bytemaskfile);
         for (ii = 0; ii < numint; ii++)
-            for (jj = 0; jj < numchan; jj++)
+            for (int jj = 0; jj < numchan; jj++)
                 bytemask[ii][jj] &= PADDING;    /* Clear all but the PADDING bits */
         inttime = ptsperint * idata.dt;
     }
@@ -489,7 +535,7 @@ int main(int argc, char *argv[])
         int numpad = 0, numbad = 0, numgood = 0;
 
         for (ii = 0; ii < numint; ii++) {
-            for (jj = 0; jj < numchan; jj++) {
+            for (int jj = 0; jj < numchan; jj++) {
                 if (bytemask[ii][jj] == GOODDATA) {
                     numgood++;
                 } else {
