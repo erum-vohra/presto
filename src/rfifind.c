@@ -54,8 +54,7 @@ int main(int argc, char *argv[])
 {
     FILE *bytemaskfile;
     float **dataavg = NULL, **datastd = NULL, **datapow = NULL;
-    float *chandata = NULL, powavg, powstd, powmax;
-    float inttime, norm = 0.0, fracterror = RFI_FRACTERROR;
+    float inttime, fracterror = RFI_FRACTERROR;
     float *rawdata = NULL;
     unsigned char **bytemask = NULL;
     short *srawdata = NULL;
@@ -63,15 +62,13 @@ int main(int argc, char *argv[])
     char *bytemaskfilenm, *rfifilenm;
     int numchan = 0, numint = 0, newper = 0, oldper = 0;
     int blocksperint, ptsperint = 0, ptsperblock = 0, padding = 0;
-    int numcands, candnum, numrfi = 0, numrfivect = NUM_RFI_VECT;
-    int ii, kk, slen, insubs = 0;
+    int numrfi = 0, numrfivect = NUM_RFI_VECT;
+    int ii, slen, insubs = 0;
     int harmsum = RFI_NUMHARMSUM, lobin = RFI_LOBIN, numbetween = RFI_NUMBETWEEN;
-    double davg, dvar, freq;
     struct spectra_info s;
     presto_interptype interptype;
     rfi *rfivect = NULL;
     mask oldmask, newmask;
-    fftcand *cands = NULL;
     infodata idata;
     Cmdline *cmd;
 
@@ -300,7 +297,6 @@ int main(int argc, char *argv[])
         dataavg = gen_fmatrix(numint, numchan);
         datastd = gen_fmatrix(numint, numchan);
         datapow = gen_fmatrix(numint, numchan);
-        chandata = gen_fvect(ptsperint);
         bytemask = gen_bmatrix(numint, numchan);
         for (ii = 0; ii < numint; ii++)
             for (int jj = 0; jj < numchan; jj++)
@@ -347,6 +343,12 @@ int main(int argc, char *argv[])
                     bytemask[ii][jj] |= PADDING;
 
             fftwf_plan realplan;
+
+            {
+
+            float *chandata = NULL, powavg, powstd, powmax;
+            chandata = gen_fvect(ptsperint);
+            
             fcomplex *fftdata = gen_cvect( (ptsperint / 2) + 1 );
             
             realplan = fftwf_plan_dft_r2c_1d(ptsperint, chandata, (fftwf_complex *) fftdata, FFTW_PATIENT);
@@ -354,8 +356,10 @@ int main(int argc, char *argv[])
             vect_free(chandata);
             vect_free(fftdata);
 
+            }
+
 #ifdef _OPENMP            
-#pragma omp parallel default(none) shared(ii, numchan, numint, blocksperint, ptsperint, rawdata, srawdata, insubs, padding, s, cmd, realplan)
+#pragma omp parallel default(none) shared(ii, numchan, numint, blocksperint, ptsperint, rawdata, srawdata, insubs, padding, s, cmd, realplan, dataavg, datastd, datapow)
 #endif
 			{
 			
@@ -374,12 +378,7 @@ int main(int argc, char *argv[])
     
                 double davg, dvar;
                     				
-                float norm = 0.0;
-				float **dataavg = NULL, **datastd = NULL, **datapow = NULL;
-		
-				dataavg = gen_fmatrix(numint, numchan);
-        		datastd = gen_fmatrix(numint, numchan);
-       			datapow = gen_fmatrix(numint, numchan);    
+                float norm = 0.0;    
 
 				presto_interptype interptype;
        			fftcand *cands = NULL;
@@ -411,8 +410,8 @@ int main(int argc, char *argv[])
                     if (datastd[ii][jj] > 1e-4) {
                     	fftwf_execute(realplan);
                         norm = datastd[ii][jj] * datastd[ii][jj] * ptsperint;
-                        cands = search_fft((fcomplex *) fftdata, (ptsperint / 2) + 1,
-                                           lobin, (ptsperint / 2) + 1, harmsum,
+                        cands = search_fft((fcomplex *) fftdata, ((ptsperint / 2) + 1),
+                                           lobin, ((ptsperint / 2) + 1), harmsum,
                                            numbetween, interptype, norm, cmd->freqsigma,
                                            &numcands, &powavg, &powstd, &powmax);
                        // Make sure that nothing bad happened in the FFT search
@@ -455,7 +454,7 @@ int main(int argc, char *argv[])
             }
             vect_free(chandata);
             vect_free(fftdata);
-           	}
+            }
            	
         }
         printf("\rAmount Complete = 100%%\n");
@@ -622,7 +621,6 @@ int main(int argc, char *argv[])
     if (!cmd->nocomputeP) {
         //  Close all the raw files and free their vectors
         close_rawfiles(&s);
-        vect_free(chandata);
         if (insubs)
             vect_free(srawdata);
         else
