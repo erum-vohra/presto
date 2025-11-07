@@ -359,29 +359,35 @@ int main(int argc, char *argv[])
             }
 
 #ifdef _OPENMP            
-#pragma omp parallel default(none) shared(ii, numchan, numint, blocksperint, ptsperint, rawdata, srawdata, insubs, padding, s, cmd, realplan, dataavg, datastd, datapow)
+#pragma omp parallel default(none) shared(ii, numchan, numint, blocksperint, ptsperint, rawdata, srawdata, \
+                                          insubs, padding, s, cmd, realplan, dataavg, datastd, datapow, inttime)
 #endif
 			{
 			
-			float *chandata = NULL, powavg, powstd, powmax;
-			chandata = gen_fvect(ptsperint);
-
-			fcomplex *fftdata = gen_cvect( (ptsperint/2) + 1);		
+			float *l_chandata = NULL, powavg, powstd, powmax;
+			l_chandata = gen_fvect(ptsperint);
+		
+			fcomplex *l_fftdata = gen_cvect( (ptsperint/2) + 1);
 
 #ifdef _OPENMP
 #pragma omp for
 #endif
 			for (int jj = 0; jj < numchan; jj++) {  /* Loop over the channels */
-                    
-            	int numcands;
+
+                int thread_num = omp_get_thread_num();    
+
+            	int numcands, candnum, numrfi = 0, numrfivect = NUM_RFI_VECT;
                 int harmsum = RFI_NUMHARMSUM, lobin = RFI_LOBIN, numbetween = RFI_NUMBETWEEN;
     
-                double davg, dvar;
+                double davg, dvar, freq;
                     				
                 float norm = 0.0;    
 
 				presto_interptype interptype;
        			fftcand *cands = NULL;
+       			rfi *rfivect = NULL;
+
+				rfivect = rfi_vector(rfivect, numchan, numint, 0, numrfivect);
 
                 if (numbetween == 2)
                 	interptype = INTERBIN;
@@ -389,9 +395,9 @@ int main(int argc, char *argv[])
                 	interptype = INTERPOLATE;
                     
                 if (RAWDATA)
-                	get_channel(chandata, jj, blocksperint, rawdata, &s);
+                	get_channel(l_chandata, jj, blocksperint, rawdata, &s);
                 else if (insubs)
-                    get_subband(jj, chandata, srawdata, blocksperint);
+                    get_subband(jj, l_chandata, srawdata, blocksperint);
                     
                 /* Calculate the averages and standard deviations */
                 /* for each point in time.                        */
@@ -401,19 +407,20 @@ int main(int argc, char *argv[])
                     datastd[ii][jj] = 0.0;
                     datapow[ii][jj] = 1.0;
                 } else {
-                    avg_var(chandata, ptsperint, &davg, &dvar);
+                    avg_var(l_chandata, ptsperint, &davg, &dvar);
                     dataavg[ii][jj] = davg;
                     datastd[ii][jj] = sqrt(dvar);
                     numcands = 0;
                     powmax = 0.0;
                  	// Don't search the power spectrum if there is little to no variance
                     if (datastd[ii][jj] > 1e-4) {
-                    	fftwf_execute(realplan);
+                    	fftwf_execute_dft_r2c(realplan, l_chandata, (fftwf_complex *) l_fftdata);
                         norm = datastd[ii][jj] * datastd[ii][jj] * ptsperint;
-                        cands = search_fft((fcomplex *) fftdata, ((ptsperint / 2) + 1),
+                        cands = search_fft((fcomplex *) l_fftdata, ((ptsperint / 2) + 1),
                                            lobin, ((ptsperint / 2) + 1), harmsum,
                                            numbetween, interptype, norm, cmd->freqsigma,
                                            &numcands, &powavg, &powstd, &powmax);
+                      //printf("CPU %d is searching in Channel %d and found %d candidates.\n", thread_num, jj, numcands);
                        // Make sure that nothing bad happened in the FFT search
                        if (!isnormal(powmax)) {
                        	   printf("WARNING:  FFT search returned bad powmax (%f) in"
@@ -428,8 +435,9 @@ int main(int argc, char *argv[])
 
                     /* Record the birdies */
 
-                    /* if (numcands) {
-                        for (kk = 0; kk < numcands; kk++) {
+                    if (numcands) {
+                        for (int kk = 0; kk < numcands; kk++) {
+                            printf("CPU %d has found %d instances of rfi!\n", thread_num, numrfi);
                             freq = cands[kk].r / inttime;
                             candnum =
                                 find_rfi(rfivect, numrfi, freq, RFI_FRACTERROR);
@@ -448,12 +456,11 @@ int main(int argc, char *argv[])
                             }
                         }
                         free(cands);
-                    } */
+                    }
                 }
-
             }
-            vect_free(chandata);
-            vect_free(fftdata);
+            vect_free(l_chandata);
+            vect_free(l_fftdata);
             }
            	
         }
