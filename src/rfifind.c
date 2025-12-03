@@ -344,6 +344,13 @@ int main(int argc, char *argv[])
 
             fftwf_plan realplan;
 
+			t_numrfivect = NUM_RFI_VECT;
+			t_numrfi = 0;
+            
+            rfi *totalrfi = NULL;
+            
+            totalrfi = rfi_vector(totalrfi, numchan, numint, 0, t_numrfivect);
+
             {
 
             float *chandata = NULL, powavg, powstd, powmax;
@@ -360,7 +367,7 @@ int main(int argc, char *argv[])
 
 #ifdef _OPENMP            
 #pragma omp parallel default(none) shared(ii, numchan, numint, blocksperint, ptsperint, rawdata, srawdata, \
-                                          insubs, padding, s, cmd, realplan, dataavg, datastd, datapow, inttime)
+                                          insubs, padding, s, cmd, realplan, dataavg, datastd, datapow, inttime, totalrfi)
 #endif
 			{
 			
@@ -368,6 +375,11 @@ int main(int argc, char *argv[])
 			l_chandata = gen_fvect(ptsperint);
 		
 			fcomplex *l_fftdata = gen_cvect( (ptsperint/2) + 1);
+
+			int numrfivect = NUM_RFI_VECT;
+
+			rfi *rfivect = NULL;
+			rfivect = rfi_vector(rfivect, numchan, numint, 0, numrfivect);
 
 #ifdef _OPENMP
 #pragma omp for
@@ -385,9 +397,6 @@ int main(int argc, char *argv[])
 
 				presto_interptype interptype;
        			fftcand *cands = NULL;
-       			rfi *rfivect = NULL;
-
-				rfivect = rfi_vector(rfivect, numchan, numint, 0, numrfivect);
 
                 if (numbetween == 2)
                 	interptype = INTERBIN;
@@ -437,11 +446,13 @@ int main(int argc, char *argv[])
 
                     if (numcands) {
                         for (int kk = 0; kk < numcands; kk++) {
-                            printf("CPU %d has found %d instances of rfi!\n", thread_num, numrfi);
+                            // printf("CPU %d has found %d instances of rfi!\n", thread_num, numrfi);
                             freq = cands[kk].r / inttime;
                             candnum =
                                 find_rfi(rfivect, numrfi, freq, RFI_FRACTERROR);
                             if (candnum >= 0) {
+                                //printf("CPU %d: Adding new RFI instance %d at freq %.3f Hz (sig=%.2f)\n", 
+                                               // thread_num, numrfi, freq, cands[kk].sig);
                                 update_rfi(rfivect + candnum, freq, cands[kk].sig,
                                            jj, ii);
                             } else {
@@ -459,6 +470,21 @@ int main(int argc, char *argv[])
                     }
                 }
             }
+#ifdef _OPENMP
+#pragma omp critical 
+#endif
+			{
+				if (t_numrfi + numrfi >= t_numrfivect) {
+					t_numrfivect *= 2;
+					totalrfi = rfi_vector(totalrfi, numchan, numint, t_numrfivect / 2, t_numrfivect);
+				}
+
+				for (int kk = 0; kk < numrfi; kk++) {
+					
+					t_numrfi++;
+				}
+			}
+			vect_free(rfivect);
             vect_free(l_chandata);
             vect_free(l_fftdata);
             }
