@@ -72,6 +72,22 @@ int main(int argc, char *argv[])
     infodata idata;
     Cmdline *cmd;
 
+#ifdef _OPENMP
+	int num_threads = omp_get_max_threads();
+#else
+	int num_threads = 1;
+#endif
+
+	rfi *tmprfi = NULL;
+	rfi **rfi_array = (rfi **) malloc(num_threads * sizeof (rfi *));
+	int *numrfivect_array = (int *) malloc(num_threads * sizeof(int));
+
+	for (int ii = 0; ii < num_threads; ii++) {
+		numrfivect_array[ii] = NUM_RFI_VECT;
+		rfi_array[ii] = rfi_vector(tmprfi, numchan, numint, 0, numrfivect_array[0]);
+	}
+
+
     /* Call usage() if we have no command line arguments */
 
     if (argc == 1) {
@@ -344,13 +360,6 @@ int main(int argc, char *argv[])
 
             fftwf_plan realplan;
 
-			t_numrfivect = NUM_RFI_VECT;
-			t_numrfi = 0;
-            
-            rfi *totalrfi = NULL;
-            
-            totalrfi = rfi_vector(totalrfi, numchan, numint, 0, t_numrfivect);
-
             {
 
             float *chandata = NULL, powavg, powstd, powmax;
@@ -365,30 +374,43 @@ int main(int argc, char *argv[])
 
             }
 
+/* #ifdef _OPENMP
+	int num_threads = omp_get_max_threads();
+#else
+	int num_threads = 1;
+#endif
+
+			rfi **rfi_array = (rfi **) malloc(num_threads * sizeof(rfi *));
+			int *numrfivect_array = (int *) malloc(num_threads * sizeof(int));
+
+			for (int ii = 0; ii < num_threads; ii++) {
+				numrfivect_array[ii] = NUM_RFI_VECT;
+				rfi_array[ii] = rfi_vector(NULL, numchan, numint, 0, numrfivect_array[ii]);
+			} */
+
 #ifdef _OPENMP            
 #pragma omp parallel default(none) shared(ii, numchan, numint, blocksperint, ptsperint, rawdata, srawdata, \
-                                          insubs, padding, s, cmd, realplan, dataavg, datastd, datapow, inttime, totalrfi)
+                                          insubs, padding, s, cmd, realplan, dataavg, datastd, datapow, inttime, \
+                                          rfi_array, numrfivect_array)
 #endif
 			{
-			
+			int thread_num = omp_get_thread_num();
+			int numrfi = 0, numrfivect = numrfivect_array[thread_num];
+
 			float *l_chandata = NULL, powavg, powstd, powmax;
 			l_chandata = gen_fvect(ptsperint);
 		
 			fcomplex *l_fftdata = gen_cvect( (ptsperint/2) + 1);
 
-			int numrfivect = NUM_RFI_VECT;
-
-			rfi *rfivect = NULL;
-			rfivect = rfi_vector(rfivect, numchan, numint, 0, numrfivect);
-
+			//rfi *rfivect = rfi_array[thread_num];
+			
 #ifdef _OPENMP
 #pragma omp for
 #endif
-			for (int jj = 0; jj < numchan; jj++) {  /* Loop over the channels */
+			for (int jj = 0; jj < numchan; jj++) {  /* Loop over the channels */    
+				printf("\rThis is the value of numrfi: %d\n", numrfi);
 
-                int thread_num = omp_get_thread_num();    
-
-            	int numcands, candnum, numrfi = 0, numrfivect = NUM_RFI_VECT;
+            	int numcands, candnum;
                 int harmsum = RFI_NUMHARMSUM, lobin = RFI_LOBIN, numbetween = RFI_NUMBETWEEN;
     
                 double davg, dvar, freq;
@@ -449,20 +471,23 @@ int main(int argc, char *argv[])
                             // printf("CPU %d has found %d instances of rfi!\n", thread_num, numrfi);
                             freq = cands[kk].r / inttime;
                             candnum =
-                                find_rfi(rfivect, numrfi, freq, RFI_FRACTERROR);
+                                find_rfi(rfi_array[thread_num], numrfi, freq, RFI_FRACTERROR);
                             if (candnum >= 0) {
                                 //printf("CPU %d: Adding new RFI instance %d at freq %.3f Hz (sig=%.2f)\n", 
                                                // thread_num, numrfi, freq, cands[kk].sig);
-                                update_rfi(rfivect + candnum, freq, cands[kk].sig,
+                                update_rfi(rfi_array[thread_num] + candnum, freq, cands[kk].sig,
                                            jj, ii);
                             } else {
-                                update_rfi(rfivect + numrfi, freq, cands[kk].sig, jj,
+                                update_rfi(rfi_array[thread_num] + numrfi, freq, cands[kk].sig, jj,
                                            ii);
                                 numrfi++;
                                 if (numrfi == numrfivect) {
                                     numrfivect *= 2;
-                                    rfivect = rfi_vector(rfivect, numchan, numint,
+                                    rfi_array[thread_num] = rfi_vector(rfi_array[thread_num], numchan, numint,
                                                          numrfivect / 2, numrfivect);
+                                                         
+                                    //rfi_array[thread_num] = rfivect;
+                                    numrfivect_array[thread_num] = numrfivect;
                                 }
                             }
                         }
@@ -470,26 +495,54 @@ int main(int argc, char *argv[])
                     }
                 }
             }
-#ifdef _OPENMP
-#pragma omp critical 
-#endif
-			{
-				if (t_numrfi + numrfi >= t_numrfivect) {
-					t_numrfivect *= 2;
-					totalrfi = rfi_vector(totalrfi, numchan, numint, t_numrfivect / 2, t_numrfivect);
-				}
-
-				for (int kk = 0; kk < numrfi; kk++) {
-					
-					t_numrfi++;
-				}
-			}
-			vect_free(rfivect);
             vect_free(l_chandata);
             vect_free(l_fftdata);
             }
            	
         }
+		printf("\rSorting RFI instances!\n");
+
+		// merge and sort total rfi, sort by freq, keep the highest sigma, increment numrfi and merge sorted list
+		// plan: make a merged list and vet each candidate before copying to the merged list
+		rfi *totrfivect = NULL;
+		totrfivect = rfi_vector(totrfivect, numchan, numint, 0, numrfivect_array[0]);
+
+		int totnumrfi = 0;
+		int totnumrfivect = numrfivect_array[0];  
+
+		for (int ii = 0; ii < num_threads; ii++) {
+			for (int jj = 0; jj < numrfivect_array[ii]; jj++) {
+				if (rfi_array[ii][jj].freq_avg > 0.0) {
+					int candnum = find_rfi(totrfivect, totnumrfi,
+					                       rfi_array[ii][jj].freq_avg, RFI_FRACTERROR);
+					if (candnum >= 0) {
+						update_rfi(totrfivect + candnum, rfi_array[ii][jj].freq_avg,
+							           rfi_array[ii][jj].sigma_avg, -1, -1);
+							           
+					} else {
+						update_rfi(totrfivect + totnumrfi, rfi_array[ii][jj].freq_avg,
+						           rfi_array[ii][jj].sigma_avg, -1, -1);
+						totnumrfi++;
+						if (totnumrfi == totnumrfivect) {
+							totnumrfivect *= 2;
+							totrfivect = rfi_vector(totrfivect, numchan, numint,
+							                        totnumrfivect / 2, totnumrfivect);
+						}
+					}
+				} else {
+					break;
+				}
+			}
+		}
+
+
+		for (int ii = 0; ii < num_threads; ii++) {
+			vect_free(rfi_array[ii]);
+		}
+
+		free(rfi_array);
+		free(numrfivect_array);
+        
         printf("\rAmount Complete = 100%%\n");
 
         /* Write the data to the output files */
