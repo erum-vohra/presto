@@ -83,6 +83,7 @@ int main(int argc, char *argv[])
 
 	for (int ii = 0; ii < num_threads; ii++) {
 		numrfivect_array[ii] = NUM_RFI_VECT;
+		rfi_array[ii] = (rfi *) malloc(sizeof(rfi));
 		rfi_array[ii] = rfi_vector(rfi_array[ii], numchan, numint, 0, numrfivect_array[ii]);
 	}
 
@@ -373,20 +374,6 @@ int main(int argc, char *argv[])
 
             }
 
-/* #ifdef _OPENMP
-	int num_threads = omp_get_max_threads();
-#else
-	int num_threads = 1;
-#endif
-
-			rfi **rfi_array = (rfi **) malloc(num_threads * sizeof(rfi *));
-			int *numrfivect_array = (int *) malloc(num_threads * sizeof(int));
-
-			for (int ii = 0; ii < num_threads; ii++) {
-				numrfivect_array[ii] = NUM_RFI_VECT;
-				rfi_array[ii] = rfi_vector(NULL, numchan, numint, 0, numrfivect_array[ii]);
-			} */
-
 #ifdef _OPENMP            
 #pragma omp parallel default(none) shared(ii, numchan, numint, blocksperint, ptsperint, rawdata, srawdata, \
                                           insubs, padding, s, cmd, realplan, dataavg, datastd, datapow, inttime, \
@@ -394,6 +381,13 @@ int main(int argc, char *argv[])
 #endif
 			{
 			int thread_num = omp_get_thread_num();
+			if (rfi_array[thread_num] == NULL) {
+				printf("HELP! thread_num: %d\n", thread_num);
+			} else {
+				printf("thread_num %d is ok!\n", thread_num);
+			}
+
+			//int thread_num = omp_get_thread_num();
 			int numrfi = 0, numrfivect = numrfivect_array[thread_num];
 
 			float *l_chandata = NULL, powavg, powstd, powmax;
@@ -407,7 +401,8 @@ int main(int argc, char *argv[])
 #pragma omp for
 #endif
 			for (int jj = 0; jj < numchan; jj++) {  /* Loop over the channels */    
-				printf("\rThis is the value of numrfi: %d\n", numrfi);
+				printf("\rThis is the value of numrfi: %d in proc: %d\n", numrfi, thread_num);
+				fflush(NULL);
 
             	int numcands, candnum;
                 int harmsum = RFI_NUMHARMSUM, lobin = RFI_LOBIN, numbetween = RFI_NUMBETWEEN;
@@ -466,6 +461,11 @@ int main(int argc, char *argv[])
                     /* Record the birdies */
 
                     if (numcands) {
+                    	/*if (rfi_array[thread_num] == NULL) {
+                    		printf("HELP! thread_num: %d\n", thread_num);
+                    	} else {
+                    		printf("thread_num: %d is ok!\n", thread_num);
+                    	}*/
                         for (int kk = 0; kk < numcands; kk++) {
                             // printf("CPU %d has found %d instances of rfi!\n", thread_num, numrfi);
                             freq = cands[kk].r / inttime;
@@ -481,7 +481,8 @@ int main(int argc, char *argv[])
                                            ii);
                                 numrfi++;
                                 if (numrfi == numrfivect) {
-                                    numrfivect *= 2;
+                                    numrfivect_array[thread_num] *= 2;
+                                    numrfivect = numrfivect_array[thread_num];
                                     rfi_array[thread_num] = rfi_vector(rfi_array[thread_num], numchan, numint,
                                                          numrfivect / 2, numrfivect);
                                                          
