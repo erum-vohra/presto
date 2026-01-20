@@ -81,7 +81,7 @@ int main(int argc, char *argv[])
 	rfi **rfi_array = (rfi **) malloc(num_threads * sizeof (rfi *));
 	int *numrfivect_array = (int *) malloc(num_threads * sizeof(int));
 
-	for (int ii = 0; ii < num_threads; ii++) {
+	for (int ii = 0; ii < num_threads + 1; ii++) {
 		numrfivect_array[ii] = NUM_RFI_VECT;
 		rfi_array[ii] = (rfi *) malloc(sizeof(rfi));
 		rfi_array[ii] = rfi_vector(rfi_array[ii], numchan, numint, 0, numrfivect_array[ii]);
