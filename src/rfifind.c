@@ -80,8 +80,10 @@ int main(int argc, char *argv[])
 
 	rfi **rfi_array = (rfi **) malloc(num_threads * sizeof (rfi *));
 	int *numrfivect_array = (int *) malloc(num_threads * sizeof(int));
+	int *numrfi_array = (int *) malloc(num_threads * sizeof(int));
 
 	for (int ii = 0; ii < num_threads + 1; ii++) {
+		numrfi_array[ii] = 0;
 		numrfivect_array[ii] = NUM_RFI_VECT;
 		rfi_array[ii] = (rfi *) malloc(sizeof(rfi));
 		rfi_array[ii] = rfi_vector(rfi_array[ii], numchan, numint, 0, numrfivect_array[ii]);
@@ -377,32 +379,23 @@ int main(int argc, char *argv[])
 #ifdef _OPENMP            
 #pragma omp parallel default(none) shared(ii, numchan, numint, blocksperint, ptsperint, rawdata, srawdata, \
                                           insubs, padding, s, cmd, realplan, dataavg, datastd, datapow, inttime, \
-                                          rfi_array, numrfivect_array)
+                                          rfi_array, numrfivect_array, numrfi_array) private(stdout)
 #endif
 			{
 			int thread_num = omp_get_thread_num();
-			if (rfi_array[thread_num] == NULL) {
-				printf("HELP! thread_num: %d\n", thread_num);
-			} else {
-				printf("thread_num %d is ok!\n", thread_num);
-			}
-
-			//int thread_num = omp_get_thread_num();
-			int numrfi = 0, numrfivect = numrfivect_array[thread_num];
-
+			// int numrfi = numrfi_array[thread_num], numrfivect = numrfivect_array[thread_num];
+			
 			float *l_chandata = NULL, powavg, powstd, powmax;
 			l_chandata = gen_fvect(ptsperint);
 		
 			fcomplex *l_fftdata = gen_cvect( (ptsperint/2) + 1);
-
-			//rfi *rfivect = rfi_array[thread_num];
-			
+						
 #ifdef _OPENMP
 #pragma omp for
 #endif
-			for (int jj = 0; jj < numchan; jj++) {  /* Loop over the channels */    
-				printf("\rThis is the value of numrfi: %d in proc: %d\n", numrfi, thread_num);
-				fflush(NULL);
+			for (int jj = 0; jj < numchan; jj++) {  /* Loop over the channels */   
+				// printf("This is the value of numrfi: %d in proc: %d in channel: %d.\n", numrfi_array[thread_num], thread_num, numchan);
+				// fflush(stdout);
 
             	int numcands, candnum;
                 int harmsum = RFI_NUMHARMSUM, lobin = RFI_LOBIN, numbetween = RFI_NUMBETWEEN;
@@ -445,7 +438,6 @@ int main(int argc, char *argv[])
                                            lobin, ((ptsperint / 2) + 1), harmsum,
                                            numbetween, interptype, norm, cmd->freqsigma,
                                            &numcands, &powavg, &powstd, &powmax);
-                      //printf("CPU %d is searching in Channel %d and found %d candidates.\n", thread_num, jj, numcands);
                        // Make sure that nothing bad happened in the FFT search
                        if (!isnormal(powmax)) {
                        	   printf("WARNING:  FFT search returned bad powmax (%f) in"
@@ -459,35 +451,25 @@ int main(int argc, char *argv[])
                     datapow[ii][jj] = powmax;
 
                     /* Record the birdies */
-
                     if (numcands) {
-                    	/*if (rfi_array[thread_num] == NULL) {
-                    		printf("HELP! thread_num: %d\n", thread_num);
-                    	} else {
-                    		printf("thread_num: %d is ok!\n", thread_num);
-                    	}*/
                         for (int kk = 0; kk < numcands; kk++) {
-                            // printf("CPU %d has found %d instances of rfi!\n", thread_num, numrfi);
                             freq = cands[kk].r / inttime;
                             candnum =
-                                find_rfi(rfi_array[thread_num], numrfi, freq, RFI_FRACTERROR);
+                                find_rfi(rfi_array[thread_num], numrfi_array[thread_num], freq, RFI_FRACTERROR);
                             if (candnum >= 0) {
-                                //printf("CPU %d: Adding new RFI instance %d at freq %.3f Hz (sig=%.2f)\n", 
-                                               // thread_num, numrfi, freq, cands[kk].sig);
                                 update_rfi(rfi_array[thread_num] + candnum, freq, cands[kk].sig,
                                            jj, ii);
                             } else {
-                                update_rfi(rfi_array[thread_num] + numrfi, freq, cands[kk].sig, jj,
+                                update_rfi(rfi_array[thread_num] + numrfi_array[thread_num], freq, cands[kk].sig, jj,
                                            ii);
-                                numrfi++;
-                                if (numrfi == numrfivect) {
+                                numrfi_array[thread_num]++;
+                                if (numrfi_array[thread_num] == numrfivect_array[thread_num]) {
                                     numrfivect_array[thread_num] *= 2;
-                                    numrfivect = numrfivect_array[thread_num];
+                                    // numrfivect = numrfivect_array[thread_num];
                                     rfi_array[thread_num] = rfi_vector(rfi_array[thread_num], numchan, numint,
-                                                         numrfivect / 2, numrfivect);
+                                                         numrfivect_array[thread_num] / 2, numrfivect_array[thread_num]);
                                                          
-                                    //rfi_array[thread_num] = rfivect;
-                                    numrfivect_array[thread_num] = numrfivect;
+                                    // numrfivect_array[thread_num] = numrfivect;
                                 }
                             }
                         }
@@ -542,6 +524,7 @@ int main(int argc, char *argv[])
 
 		free(rfi_array);
 		free(numrfivect_array);
+		free(numrfi_array);
         
         printf("\rAmount Complete = 100%%\n");
 
