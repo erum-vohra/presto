@@ -110,6 +110,38 @@ void update_rfi(rfi * oldrfi, float freq, float sigma, int channel, int interval
     SET_BIT(oldrfi->chans, channel);
 }
 
+void merge_rfi(rfi * newrfi, const rfi * oldrfi, int numchan, int numint)
+/* Merges a new rfi structure with an old rfi structure. 
+   Made to deal with duplicates with parallel rfifind. */
+{
+	//just use rfi_vector to add the new detections to the totrfi, flag -rfi ps, ocular, etc to open the ps file
+
+	double a, b, freq_var, freq_avg, sigma_avg;
+	
+	int numt = (numint % 8) ? numint / 8 + 1 : numint / 8;
+    int numc = (numchan % 8) ? numchan / 8 + 1 : numchan / 8;
+
+	a = (double) (newrfi->numobs);
+	b = (double) (oldrfi->numobs);
+
+	freq_var = ((double) newrfi->freq_var * a + (double) oldrfi->freq_var * b) / (a + b);
+	newrfi->freq_var = freq_var;
+		
+	freq_avg = ((double) newrfi->freq_avg * a + (double) oldrfi->freq_avg * b) / (a + b);
+	newrfi->freq_avg = freq_avg;
+		
+	sigma_avg = ((double) newrfi->sigma_avg * a + (double) oldrfi->sigma_avg * b) / (a + b) ;
+	newrfi->sigma_avg = sigma_avg;
+
+	newrfi->numobs += oldrfi->numobs;
+
+	for (int ii = 0; ii < numt; ii++)
+		newrfi->times[ii] |= oldrfi->times[ii];
+
+	for (int ii = 0; ii < numc; ii++)
+		newrfi->chans[ii] |= oldrfi->chans[ii];
+}
+
 int find_rfi(rfi * rfivect, int numrfi, double freq, double fract_error)
 /* Try to find a birdie in an rfi ector.  Compare all */
 /* currently known birdies with the new freq.  If it  */

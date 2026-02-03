@@ -38,6 +38,10 @@ void update_rfi(rfi *oldrfi, float freq, float sigma,
 		int channel, int interval);
 /* Updates an rfi structure with a new detection */
 
+void merge_rfi(rfi *newrfi, const rfi *oldrfi, int numchan, int numint);
+/* Merges a new rfi structure with an old rfi structure.
+   Made to deal with duplicates in parallel rfifind. */
+
 int find_rfi(rfi *rfivect, int numrfi, 
 	     double freq, double fract_error);
 /* Try to find a birdie in an rfi ector.  Compare all */

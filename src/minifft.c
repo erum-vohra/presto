@@ -194,8 +194,14 @@ fftcand *search_fft(fcomplex * fft, int numfft, int lobin, int hibin,
 
     /* Chop off the unused parts of the dynamic array */
 
-    if (dynamic)
-        cands = (fftcand *) realloc(cands, nc * sizeof(fftcand));
+    if (dynamic){
+    	if (nc > 0) {
+        	cands = (fftcand *) realloc(cands, nc * sizeof(fftcand));
+        } else {
+        	free(cands);
+        	cands = NULL;
+        }
+    }
     *numcands = nc;
     return cands;
 }
