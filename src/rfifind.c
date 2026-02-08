@@ -60,6 +60,7 @@ int main(int argc, char *argv[])
     short *srawdata = NULL;
     char *outfilenm, *statsfilenm, *maskfilenm;
     char *bytemaskfilenm, *rfifilenm;
+    int num_threads = 1;
     int numchan = 0, numint = 0, newper = 0, oldper = 0;
     int blocksperint, ptsperint = 0, ptsperblock = 0, padding = 0;
     int numrfi = 0, numrfivect = NUM_RFI_VECT;
@@ -71,16 +72,7 @@ int main(int argc, char *argv[])
     mask oldmask, newmask;
     infodata idata;
     Cmdline *cmd;
-
-#ifdef _OPENMP
-	int num_threads = omp_get_max_threads();
-#else
-	int num_threads = 1;
-#endif
-
-	rfi **rfi_array = (rfi **) malloc((num_threads + 1) * sizeof (rfi *));
-	int *numrfivect_array = (int *) malloc((num_threads + 1) * sizeof(int));
-	int *numrfi_array = (int *) malloc((num_threads + 1) * sizeof(int));
+    fftwf_plan realplan;
 
     /* Call usage() if we have no command line arguments */
 
@@ -137,6 +129,14 @@ int main(int argc, char *argv[])
 #ifdef DEBUG
     showOptionValues();
 #endif
+
+#ifdef _OPENMP
+	num_threads = omp_get_num_threads();
+#endif
+
+	rfi **tmprfi_arr = (rfi **) malloc((num_threads + 1) * sizeof (rfi *));
+	int *tmpnumrfivect_arr = (int *) malloc((num_threads + 1) * sizeof(int));
+	int *tmpnumrfi_arr = (int *) malloc((num_threads + 1) * sizeof(int));
 
     printf("\n\n");
     printf("               Pulsar Data RFI Finder\n");
@@ -317,20 +317,32 @@ int main(int argc, char *argv[])
         else
             interptype = INTERPOLATE;
         
-        for (int ii = 0; ii <= num_threads; ii++) {
-			numrfi_array[ii] = 0;
-        	numrfivect_array[ii] = NUM_RFI_VECT;
-        	rfi_array[ii] = (rfi *) malloc(sizeof(rfi));
-        	// rfi_array[ii] = NULL;
-        	rfi_array[ii] = rfi_vector(rfi_array[ii], numchan, numint, 0, numrfivect_array[ii]);
+        for (int ii = 0; ii < num_threads + 1; ii++) {
+        	printf("Number %d\n", ii);
+			tmpnumrfi_arr[ii] = 0;
+        	tmpnumrfivect_arr[ii] = NUM_RFI_VECT;
+        	tmprfi_arr[ii] = (rfi *) malloc(sizeof(rfi));
+        	tmprfi_arr[ii] = rfi_vector(tmprfi_arr[ii], numchan, numint, 0, tmpnumrfivect_arr[ii]);
+        }
+
+        {
+        printf("Generating FFT plan...\n\n");
+        float *chandata = NULL, powavg, powstd, powmax;
+        chandata = gen_fvect(ptsperint);
+        
+        fcomplex *fftdata = gen_cvect( (ptsperint / 2) + 1 );
+        
+        realplan = fftwf_plan_dft_r2c_1d(ptsperint, chandata, (fftwf_complex *) fftdata, FFTW_PATIENT);
+        
+        vect_free(chandata);
+        vect_free(fftdata);
         }
 
         /* Main loop */
-
         printf("Writing mask data  to '%s'.\n", maskfilenm);
         printf("Writing  RFI data  to '%s'.\n", rfifilenm);
         printf("Writing statistics to '%s'.\n\n", statsfilenm);
-        printf("Massaging the data ...\n\n");
+        printf("Massaging the data...\n\n");
         printf("Amount Complete = %3d%%", oldper);
         fflush(stdout);
 
@@ -341,7 +353,7 @@ int main(int argc, char *argv[])
                 fflush(stdout);
                 oldper = newper;
             }
-
+            
             /* Read a chunk of data */
 
             if (RAWDATA) {
@@ -360,29 +372,13 @@ int main(int argc, char *argv[])
                 for (int jj = 0; jj < numchan; jj++)
                     bytemask[ii][jj] |= PADDING;
 
-            fftwf_plan realplan;
-
-            {
-
-            float *chandata = NULL, powavg, powstd, powmax;
-            chandata = gen_fvect(ptsperint);
-            
-            fcomplex *fftdata = gen_cvect( (ptsperint / 2) + 1 );
-            
-            realplan = fftwf_plan_dft_r2c_1d(ptsperint, chandata, (fftwf_complex *) fftdata, FFTW_PATIENT);
-
-            vect_free(chandata);
-            vect_free(fftdata);
-
-            }
-
 #ifdef _OPENMP            
 #pragma omp parallel default(none) shared(ii, numchan, numint, blocksperint, ptsperint, rawdata, srawdata, \
                                           insubs, padding, s, cmd, realplan, dataavg, datastd, datapow, inttime, \
-                                          rfi_array, numrfivect_array, numrfi_array)
+                                          tmprfi_arr, tmpnumrfivect_arr, tmpnumrfi_arr)
 #endif
-			{
-			int thread_num = omp_get_thread_num();
+			{			
+			int t = omp_get_thread_num();
 			
 			float *l_chandata = NULL, powavg, powstd, powmax;
 			l_chandata = gen_fvect(ptsperint);
@@ -452,19 +448,19 @@ int main(int argc, char *argv[])
                         for (int kk = 0; kk < numcands; kk++) {
                             freq = cands[kk].r / inttime;
                             candnum =
-                                find_rfi(rfi_array[thread_num], numrfi_array[thread_num], freq, RFI_FRACTERROR);
+                                find_rfi(tmprfi_arr[t], tmpnumrfi_arr[t], freq, RFI_FRACTERROR);
                             if (candnum >= 0) {
-                                update_rfi(rfi_array[thread_num] + candnum, freq, cands[kk].sig,
+                                update_rfi(tmprfi_arr[t] + candnum, freq, cands[kk].sig,
                                            jj, ii);
                             } else {
-                                update_rfi(rfi_array[thread_num] + numrfi_array[thread_num], freq, cands[kk].sig, jj,
+                                update_rfi(tmprfi_arr[t] + tmpnumrfi_arr[t], freq, cands[kk].sig, jj,
                                            ii);
-                                numrfi_array[thread_num]++;
-                                if (numrfi_array[thread_num] == numrfivect_array[thread_num]) {
-                                    numrfivect_array[thread_num] *= 2;
+                                tmpnumrfi_arr[t]++;
+                                if (tmpnumrfi_arr[t] == tmpnumrfivect_arr[t]) {
+                                    tmpnumrfivect_arr[t] *= 2;
 
-                                    rfi_array[thread_num] = rfi_vector(rfi_array[thread_num], numchan, numint,
-                                                         numrfivect_array[thread_num] / 2, numrfivect_array[thread_num]);
+                                    tmprfi_arr[t] = rfi_vector(tmprfi_arr[t], numchan, numint,
+                                                         tmpnumrfivect_arr[t] / 2, tmpnumrfivect_arr[t]);
                                                          
                                 }
                             }
@@ -478,44 +474,47 @@ int main(int argc, char *argv[])
             }
            	
         }
-		printf("\rSorting RFI instances!\n");
 
-		// merge and sort total rfi, sort by freq, keep the highest sigma, increment numrfi and merge sorted list
-		// plan: make a merged list and vet each candidate before copying to the merged list
+        printf("\rAmount Complete = 100%%\n");
+		printf("Sorting RFI instances ...\n");
 
-		for (int ii = 0; ii <= num_threads; ii++) {
-			for (int jj = 0; jj < numrfivect_array[ii]; jj++) {
-				if (rfi_array[ii][jj].freq_avg > 0.0) {
-					int candnum = find_rfi(rfivect, numrfi,
-					                       rfi_array[ii][jj].freq_avg, RFI_FRACTERROR);
-					if (candnum >= 0) {
-						merge_rfi(rfivect + candnum, &rfi_array[ii][jj], numchan, numint);
+		//if (num_threads > 1) {
+			for (int ii = 0; ii <= num_threads; ii++) {
+				for (int jj = 0; jj <= tmpnumrfivect_arr[ii]; jj++) {
+					if (tmprfi_arr[ii][jj].freq_avg > 0.0) {
+						int candnum = find_rfi(rfivect, numrfi,
+					                       tmprfi_arr[ii][jj].freq_avg, RFI_FRACTERROR);
+						if (candnum >= 0) {
+							merge_rfi(rfivect + candnum, &tmprfi_arr[ii][jj], numchan, numint);
 							           
-					} else {
-						merge_rfi(rfivect + numrfi, &rfi_array[ii][jj], numchan, numint);
+						} else {
+							merge_rfi(rfivect + numrfi, &tmprfi_arr[ii][jj], numchan, numint);
 						
-						numrfi++;
-						if (numrfi == numrfivect) {
-							numrfivect *= 2;
-							rfivect = rfi_vector(rfivect, numchan, numint,
+							numrfi++;
+							if (numrfi == numrfivect) {
+								numrfivect *= 2;
+								rfivect = rfi_vector(rfivect, numchan, numint,
 							                        numrfivect / 2, numrfivect);
+							}
 						}
+					} else {
+						break;
 					}
-				} else {
-					break;
 				}
 			}
-		}
+		/*} else {
+			rfivect = &tmprfi_arr;
+			numrfi = &tmpnumrfi_arr;
+			numrfivect = &tmpnumrfivect_arr;
+		} */
 
 
 		for (int ii = 0; ii <= num_threads; ii++)
-			vect_free(rfi_array[ii]);
+			vect_free(tmprfi_arr[ii]);
 
-		free(rfi_array);
-		free(numrfivect_array);
-		free(numrfi_array);
-        
-        printf("\rAmount Complete = 100%%\n");
+		free(tmprfi_arr);
+		free(tmpnumrfivect_arr);
+		free(tmpnumrfi_arr);
 
         /* Write the data to the output files */
 
