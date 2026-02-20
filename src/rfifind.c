@@ -331,7 +331,7 @@ int main(int argc, char *argv[])
         
         fcomplex *fftdata = gen_cvect( (ptsperint / 2) + 1 );
         
-        realplan = fftwf_plan_dft_r2c_1d(ptsperint, chandata, (fftwf_complex *) fftdata, FFTW_PATIENT);
+        realplan = fftwf_plan_dft_r2c_1d(ptsperint, chandata, (fftwf_complex *) fftdata, FFTW_MEASURE);
         
         vect_free(chandata);
         vect_free(fftdata);
@@ -385,10 +385,10 @@ int main(int argc, char *argv[])
 			fcomplex *l_fftdata = gen_cvect( (ptsperint/2) + 1);
 						
 #ifdef _OPENMP
-#pragma omp for schedule(static)
+#pragma omp for schedule(dynamic)
 #endif
 			for (int jj = 0; jj < numchan; jj++) {  /* Loop over the channels */   
-
+				printf("Static: This is thread %d. I am working on channel %d.\n", t, ii);
             	int numcands, candnum;
                 int harmsum = RFI_NUMHARMSUM, lobin = RFI_LOBIN, numbetween = RFI_NUMBETWEEN;
     
@@ -456,8 +456,8 @@ int main(int argc, char *argv[])
                                            ii);
                                 tmpnumrfi_arr[t]++;
                                 if (tmpnumrfi_arr[t] == tmpnumrfivect_arr[t]) {
+                                	// printf("Reallocing tmprfi_arr[%d]!\n", t);
                                     tmpnumrfivect_arr[t] *= 2;
-
                                     tmprfi_arr[t] = rfi_vector(tmprfi_arr[t], numchan, numint,
                                                          tmpnumrfivect_arr[t] / 2, tmpnumrfivect_arr[t]);
                                                          

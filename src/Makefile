@@ -166,9 +166,11 @@ all: libpresto binaries
 
 # Default indentation is K&R style with no-tabs,
 # an indentation level of 4 (default), and a line-length of 85
+INDENTFILES ?= *.c
+
 indent:
-	indent -kr -nut -l85 *.c
-	rm *.c~
+	indent -kr -nut -l85 $(INDENTFILES)
+	rm $(INDENTFILES:=~)
 
 prep:
 	touch *_cmd.c
