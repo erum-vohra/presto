@@ -745,8 +745,40 @@ int prep_subbands(float *fdata, float *rawdata, int *delays, int numsubbands,
         firsttime = 0;
         return 0;
     } else {
-        dedisp_subbands(currentdata, lastdata, s->spectra_per_subint,
-                        s->num_channels, delays, numsubbands, fdata);
+        /* dedisp_subbands(currentdata, lastdata, s->spectra_per_subint,
+                        s->num_channels, delays, numsubbands, fdata); */
+
+        //
+        const int numchan = s->num_channels;
+        const int numpts = s->spectra_per_subint;
+		const int chan_per_subband = numchan / numsubbands;
+		long long kk;
+
+		long long loffset = (long long)(numpts) * numsubbands;
+		for (long long ii; ii < loffset; ii++) {
+			fdata[ii] = 0.0;
+		}
+
+#ifdef _OPENMP
+#pragma omp parallel for schedule(static, chan_per_subband) default(none)\
+                         shared(fdata, currentdata, lastdata, delays, numchan, numpts, chan_per_subband)
+#endif
+		for (long long ii = 0; ii < numchan; ii++) {
+			const int subnum = ii / chan_per_subband;
+			const int dind = delays[ii];
+			float *sub = fdata + subnum * numpts;
+			const long long loffset = ii * numpts;
+			float *chan = lastdata + loffset + dind;
+#ifdef _OPENMP
+#pragma omp parallel for private(kk) shared(sub, chan, numpts)
+#endif
+			for (long long jj = 0; jj < numpts - dind; jj++)
+				sub[jj] += chan[jj];
+			chan = currentdata + ii * numpts;
+			for (long long jj = numpts - dind, kk = 0; jj < numpts; jj++, kk++)
+				sub[jj] += chan[kk];
+		}
+        //
         SWAP(currentdata, lastdata);
         // Transpose the resulting data into spectra as a function of time
         if (transpose == 0)

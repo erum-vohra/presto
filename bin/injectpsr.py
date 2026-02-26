@@ -1,1 +1,0 @@
-../python/presto/injectpsr.py
