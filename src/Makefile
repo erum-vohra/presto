@@ -40,7 +40,7 @@ GSLLINK := $(shell pkg-config --libs gsl)
 # https://www.intel.com/content/www/us/en/developer/tools/oneapi/onemkl-link-line-advisor.html
 # MKLROOT := /usr
 # FFTINC := -I${MKLROOT}/include/mkl -DMKL_ILP64
-# FFTLINK := -L${MKLROOT}/lib/intel64 -Wl,--no-as-needed -lmkl_intel_ilp64 -lmkl_sequential -lmkl_core -lpthread -lm -l
+# FFTLINK := -L${MKLROOT}/lib/intel64 -Wl,--no-as-needed -lmkl_intel_ilp64 -lmkl_sequential -lmkl_core -lpthread -lm -ldl
 # Note:  accelsearch tests seems to show that Intel's MKL FFTW interface is about 10% slower than FFTW
 
 # Include and link information for the GLIB 2.0 library
@@ -75,8 +75,6 @@ CLINKFLAGS = $(CFLAGS) -Wl,-rpath,$(PRESTO)/lib
 # re-compile PRESTO, and re-install the python modules.  This seems to be
 # required when using Anaconda Python.
 CFLAGS += -DUSE_FFTW_MALLOC
-CFLAGS += -I/usr/include/glib-2.0
-CFLAGS += -I/usr/lib/x86_64-linux-gnu/glib-2.0/include
 
 # Add some GCC-specific flags that are useful
 ifeq ($(CC),gcc)
@@ -92,21 +90,19 @@ endif
 FFLAGS = -g -fPIC
 FLINKFLAGS = $(FFLAGS) -Wl,-rpath,$(PRESTO)/lib
 
-# CFLAGS_NOOMP = $(CFLAGS)
-
 # Add flags we need for openmp
-#ifeq ($(USEOPENMP),true)
-#	ifeq ($(CC),icc)
-#		OMPFLAGS = -openmp
-#		CFLAGS += $(OMPFLAGS)
-#		FLINKFLAGS += $(OMPFLAGS)
+ifeq ($(USEOPENMP),true)
+	ifeq ($(CC),icc)
+		OMPFLAGS = -openmp
+		CFLAGS += $(OMPFLAGS)
+		FLINKFLAGS += $(OMPFLAGS)
 # for GCC and clang
-#	else
-#		OMPFLAGS = -fopenmp
-#		CFLAGS += $(OMPFLAGS)
-#		FLINKFLAGS += $(OMPFLAGS)
-#	endif
-#endif
+	else
+		OMPFLAGS = -fopenmp
+		CFLAGS += $(OMPFLAGS)
+		FLINKFLAGS += $(OMPFLAGS)
+	endif
+endif
 
 # Add flags we need for profiling (including making a static libpresto)
 ifeq ($(USEPROFILE),true)
@@ -168,11 +164,9 @@ all: libpresto binaries
 
 # Default indentation is K&R style with no-tabs,
 # an indentation level of 4 (default), and a line-length of 85
-INDENTFILES ?= *.c
-
 indent:
-	indent -kr -nut -l85 $(INDENTFILES)
-	rm $(INDENTFILES:=~)
+	indent -kr -nut -l85 *.c
+	rm *.c~
 
 prep:
 	touch *_cmd.c
@@ -187,25 +181,10 @@ timetest:
 	./timetest
 	rm -f timetest
 
-
-
 libpresto: libpresto$(LIBSUFFIX)
 
 libpresto$(LIBSUFFIX): $(PRESTOOBJS)
 	$(LINKCOMMAND) $(PRESTO)/lib/$@ $(PRESTOOBJS)
-
-ifeq ($(USEOPENMP),true)
-    ifeq ($(CC),icc)
-        OMPFLAGS = -openmp
-        CFLAGS += $(OMPFLAGS)
-        FLINKFLAGS += $(OMPFLAGS)
-# for GCC and clang
-    else
-        OMPFLAGS = -fopenmp
-        CFLAGS += $(OMPFLAGS)
-        FLINKFLAGS += $(OMPFLAGS)
-    endif
-endif
 
 binaries: $(BINARIES)
 
@@ -259,11 +238,11 @@ rfifind: rfifind_cmd.c rfifind_cmd.o rfifind.o rfi_utils.o rfifind_plot.o $(INST
 prepdata: prepdata_cmd.c prepdata_cmd.o prepdata.o $(INSTRUMENTOBJS) libpresto
 	$(CC) $(CLINKFLAGS) -o $(PRESTO)/bin/$@ prepdata.o prepdata_cmd.o $(INSTRUMENTOBJS) $(PRESTOLINK) -lcfitsio -lm
 
-prepsubband: prepsubband_cmd.c prepsubband_cmd.o prepsubband.o dispersion_omp.o $(INSTRUMENTOBJS) libpresto
-	$(CC) $(CLINKFLAGS) -o $(PRESTO)/bin/$@ prepsubband.o prepsubband_cmd.o dispersion_omp.o $(INSTRUMENTOBJS) $(PRESTOLINK) -lcfitsio -lm
+prepsubband: prepsubband_cmd.c prepsubband_cmd.o prepsubband.o $(INSTRUMENTOBJS) libpresto
+	$(CC) $(CLINKFLAGS) -o $(PRESTO)/bin/$@ prepsubband.o prepsubband_cmd.o $(INSTRUMENTOBJS) $(PRESTOLINK) -lcfitsio -lm
 
-prepfold: prepfold_cmd.c prepfold_cmd.o prepfold.o prepfold_utils.o prepfold_plot.o least_squares.o polycos.o readpar.o dispersion_omp.o $(INSTRUMENTOBJS) $(PLOT2DOBJS) libpresto
-	$(FC) $(FLINKFLAGS) -o $(PRESTO)/bin/$@ prepfold.o prepfold_utils.o prepfold_plot.o prepfold_cmd.o least_squares.o polycos.o readpar.o dispersio_omp.o $(PLOT2DOBJS) $(INSTRUMENTOBJS) $(LAPACKLINK) $(PRESTOLINK) $(PGPLOTLINK) -lcfitsio -lm
+prepfold: prepfold_cmd.c prepfold_cmd.o prepfold.o prepfold_utils.o prepfold_plot.o least_squares.o polycos.o readpar.o $(INSTRUMENTOBJS) $(PLOT2DOBJS) libpresto
+	$(FC) $(FLINKFLAGS) -o $(PRESTO)/bin/$@ prepfold.o prepfold_utils.o prepfold_plot.o prepfold_cmd.o least_squares.o polycos.o readpar.o $(PLOT2DOBJS) $(INSTRUMENTOBJS) $(LAPACKLINK) $(PRESTOLINK) $(PGPLOTLINK) -lcfitsio -lm
 
 show_pfd: show_pfd_cmd.c show_pfd.o show_pfd_cmd.o prepfold_utils.o prepfold_plot.o least_squares.o $(PLOT2DOBJS) libpresto
 	$(FC) $(FLINKFLAGS) -o $(PRESTO)/bin/$@ show_pfd.o show_pfd_cmd.o prepfold_utils.o prepfold_plot.o least_squares.o $(PLOT2DOBJS) $(LAPACKLINK) $(PRESTOLINK) $(PGPLOTLINK) -lm
@@ -339,9 +318,6 @@ fitsdelrow: fitsdelrow.o
 
 fitsdelcol: fitsdelcol.o
 	$(CC) $(CLINKFLAGS) -o $(PRESTO)/bin/$@ fitsdelcol.o $(CFITSIOLINK) -lm
-
-# dispersion.o: dispersion.c
-# 	$(CC) $(filter-out $(OMPFLAGS),$(CFLAGS)) -c dispersion.c
 
 clean:
 	rm -f *.o *~ *#

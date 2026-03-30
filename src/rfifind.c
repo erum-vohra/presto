@@ -1,3 +1,4 @@
+#include <time.h>
 #include <limits.h>
 #include <ctype.h>
 #include "presto.h"
@@ -52,6 +53,11 @@ extern int *ranges_to_ivect(char *str, int minval, int maxval, int *numvals);
 
 int main(int argc, char *argv[])
 {
+	struct timespec start, end;
+	struct timespec pstart, pend;
+
+	clock_gettime(CLOCK_MONOTONIC, &start);
+
     FILE *bytemaskfile;
     float **dataavg = NULL, **datastd = NULL, **datapow = NULL;
     float inttime, fracterror = RFI_FRACTERROR;
@@ -73,6 +79,7 @@ int main(int argc, char *argv[])
     infodata idata;
     Cmdline *cmd;
     fftwf_plan realplan;
+    
 
     /* Call usage() if we have no command line arguments */
 
@@ -371,6 +378,8 @@ int main(int argc, char *argv[])
                 for (int jj = 0; jj < numchan; jj++)
                     bytemask[ii][jj] |= PADDING;
 
+			clock_gettime(CLOCK_MONOTONIC, &pstart);
+
 #ifdef _OPENMP            
 #pragma omp parallel default(none) shared(ii, numchan, numint, blocksperint, ptsperint, rawdata, srawdata, \
                                           insubs, padding, s, cmd, realplan, dataavg, datastd, datapow, inttime, \
@@ -470,6 +479,8 @@ int main(int argc, char *argv[])
             vect_free(l_chandata);
             vect_free(l_fftdata);
             }
+
+            clock_gettime(CLOCK_MONOTONIC, &pend);
            	
         }
 
@@ -684,6 +695,13 @@ int main(int argc, char *argv[])
         else
             vect_free(rawdata);
     }
+
+	clock_gettime(CLOCK_MONOTONIC, &end);
+	long long ttot = end.tv_nsec - start.tv_nsec;
+	long long ptot = pend.tv_nsec - pstart.tv_nsec;
+	printf("Total Time: %lld ns\n", ttot);
+	printf("Parallel Time: %lld ns\n", ptot);
+    
     return (0);
 }
 
