@@ -175,33 +175,53 @@ void dedisp_subbands(float *data, float *lastdata,
 // the lowest freq channel.
 {
     const int chan_per_subband = numchan / numsubbands;
-    long long ii, jj, kk, loffset;
+    long long ii, jj, kk;
+
+    const int dind = delays[ii];
 
     /* Initialize the result array */
-    loffset = (long long)(numpts) * numsubbands;
-    for (ii = 0; ii < loffset; ii++)
+    long long loffset = (long long)(numpts) * numsubbands;
+    for (long long ii = 0; ii < loffset; ii++)
         result[ii] = 0.0;
 
     /* De-disperse into the subbands */
 #ifdef _OPENMP
-#pragma omp parallel for schedule(static,chan_per_subband)\
-   default(none) private(ii,jj,kk) shared(result,data,lastdata,delays,numchan,numpts,chan_per_subband)
+#pragma omp parallel for collapse(2) schedule(static,chan_per_subband) \
+   default(none) shared(dind,result,data,lastdata,delays,numchan,numpts,chan_per_subband)
 #endif
-    for (ii = 0; ii < numchan; ii++) {
-        const int subnum = ii / chan_per_subband;
-        const int dind = delays[ii];
-        float *sub = result + subnum * numpts;
-        const long long loffset = ii * numpts;
-        float *chan = lastdata + loffset + dind;
+    for (long long ii = 0; ii < numchan; ii++) {
+    	for (long long jj = 0; jj < numpts - dind; jj++) {
+        	const int subnum = ii / chan_per_subband;
+        	float *sub = result + subnum * numpts;
+        	const long long loffset = ii * numpts;
+        	float *chan = lastdata + loffset + dind;
+			sub[jj] += chan[jj];
+		}
+	}
+
+#ifdef _OPENMP
+#pragma omp parallel for collapse(2) schedule(static,chan_per_subband)\
+   default(none) private(jj,kk) shared(dind,result,data,lastdata,delays,numchan,numpts)
+#endif
+	for (long long ii = 0; ii < numchan; ii++) {
+		for (jj = numpts - dind, kk = 0; jj < numpts; jj++, kk++) {
+		    const int subnum = ii / chan_per_subband;
+        	float *sub = result + subnum * numpts;
+        	const long long loffset = ii * numpts;
+        	float *chan = lastdata + loffset + dind;
+			chan = data + ii * numpts;
+			sub[jj] += chan[kk];
+		}
+	}
+    	
 // #ifdef _OPENMP
-// #pragma omp parallel for private(jj) shared(sub,chan,numpts)
+// #pragma omp parallel for private(kk) shared(sub,chan,numpts,ii,dind)
 // #endif
-        for (jj = 0; jj < numpts - dind; jj++)
+       /* for (long long jj = 0; jj < numpts - dind; jj++)
             sub[jj] += chan[jj];
         chan = data + ii * numpts;
-        for (jj = numpts - dind, kk = 0; jj < numpts; jj++, kk++)
-            sub[jj] += chan[kk];
-    }
+        for (long long jj = numpts - dind, kk = 0; jj < numpts; jj++, kk++)
+            sub[jj] += chan[kk]; */
 }
 
 

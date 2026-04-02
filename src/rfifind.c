@@ -55,6 +55,7 @@ int main(int argc, char *argv[])
 {
 	struct timespec start, end;
 	struct timespec pstart, pend;
+	long long ptot = 0;
 
 	clock_gettime(CLOCK_MONOTONIC, &start);
 
@@ -481,6 +482,8 @@ int main(int argc, char *argv[])
             }
 
             clock_gettime(CLOCK_MONOTONIC, &pend);
+
+            ptot += (pend.tv_sec - pstart.tv_sec) * 1000000000LL + (pend.tv_nsec - pstart.tv_nsec);
            	
         }
 
@@ -697,8 +700,8 @@ int main(int argc, char *argv[])
     }
 
 	clock_gettime(CLOCK_MONOTONIC, &end);
-	long long ttot = end.tv_nsec - start.tv_nsec;
-	long long ptot = pend.tv_nsec - pstart.tv_nsec;
+	long long ttot = (end.tv_sec - start.tv_sec) * 1000000000LL + (end.tv_nsec - start.tv_nsec);
+	//long long ptot = pend.tv_nsec - pstart.tv_nsec;
 	printf("Total Time: %lld ns\n", ttot);
 	printf("Parallel Time: %lld ns\n", ptot);
     
